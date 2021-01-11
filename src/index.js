@@ -33,6 +33,9 @@ type Props = {
   /** Callback to be invoked on-resize */
   onResize: Size => void,
 
+  /** Number of milliseconds to wait before triggering a resize */
+  debounce?: number,
+
   /** Optional inline style */
   style: ?Object,
 };
@@ -67,7 +70,7 @@ export default class AutoSizer extends React.PureComponent<Props, State> {
   _detectElementResize: DetectElementResize;
 
   componentDidMount() {
-    const {nonce} = this.props;
+    const { nonce } = this.props;
     if (
       this._autoSizer &&
       this._autoSizer.parentNode &&
@@ -86,7 +89,7 @@ export default class AutoSizer extends React.PureComponent<Props, State> {
       this._detectElementResize = createDetectElementResize(nonce);
       this._detectElementResize.addResizeListener(
         this._parentNode,
-        this._onResize,
+        this._onResize
       );
 
       this._onResize();
@@ -94,10 +97,13 @@ export default class AutoSizer extends React.PureComponent<Props, State> {
   }
 
   componentWillUnmount() {
+    if (this.debounceTimeout) {
+      window.clearTimeout(this.debounceTimeout);
+    }
     if (this._detectElementResize && this._parentNode) {
       this._detectElementResize.removeResizeListener(
         this._parentNode,
-        this._onResize,
+        this._onResize
       );
     }
   }
@@ -110,12 +116,12 @@ export default class AutoSizer extends React.PureComponent<Props, State> {
       disableWidth,
       style,
     } = this.props;
-    const {height, width} = this.state;
+    const { height, width } = this.state;
 
     // Outer div should not force width/height since that may prevent containers from shrinking.
     // Inner component should overflow and use calculated width/height.
     // See issue #68 for more information.
-    const outerStyle: Object = {overflow: 'visible'};
+    const outerStyle: Object = { overflow: 'visible' };
     const childParams: Object = {};
 
     // Avoid rendering children before the initial measurements have been collected.
@@ -145,14 +151,28 @@ export default class AutoSizer extends React.PureComponent<Props, State> {
         style={{
           ...outerStyle,
           ...style,
-        }}>
+        }}
+      >
         {!bailoutOnChildren && children(childParams)}
       </div>
     );
   }
 
   _onResize = () => {
-    const {disableHeight, disableWidth, onResize} = this.props;
+    const { debounce } = this.props;
+    if (debounce === undefined) {
+      this._doOnResize();
+    } else {
+      if (this.debounceTimeout) {
+        window.clearTimeout(this.debounceTimeout);
+      }
+      this.debounceTimeout = window.setTimeout(this._doOnResize, debounce);
+    }
+  };
+
+  _doOnResize = () => {
+    this.debounceTimeout = null;
+    const { disableHeight, disableWidth, onResize } = this.props;
 
     if (this._parentNode) {
       // Guard against AutoSizer component being removed from the DOM immediately after being added.
@@ -180,7 +200,7 @@ export default class AutoSizer extends React.PureComponent<Props, State> {
           width: width - paddingLeft - paddingRight,
         });
 
-        onResize({height, width});
+        onResize({ height, width });
       }
     }
   };
